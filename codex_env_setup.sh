@@ -17,8 +17,7 @@ update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 \
 pip3 install --no-cache-dir --break-system-packages pydivsufsort
 
 # Clone and build the project (adjust the repo URL as needed)
-cd /workspace
-git checkout -b build-options
+git checkout -b lcp-util
 mkdir -p build
 cd build
 cmake ..
