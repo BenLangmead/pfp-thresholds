@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     g++-10 \
     git \
     make \
+    python3-pip \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -14,6 +15,9 @@ RUN apt-get update && apt-get install -y \
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 \
     --slave /usr/bin/g++ g++ /usr/bin/g++-10 \
     --slave /usr/bin/gcov gcov /usr/bin/gcov-10
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir --break-system-packages pydivsufsort
 
 # Set working directory
 WORKDIR /workspace

@@ -5,6 +5,7 @@ apt-get update && apt-get install -y \
     g++-10 \
     git \
     make \
+    python3-pip \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -12,6 +13,8 @@ apt-get update && apt-get install -y \
 update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 \
     --slave /usr/bin/g++ g++ /usr/bin/g++-10 \
     --slave /usr/bin/gcov gcov /usr/bin/gcov-10
+
+pip3 install --no-cache-dir --break-system-packages pydivsufsort
 
 # Clone and build the project (adjust the repo URL as needed)
 cd /workspace
