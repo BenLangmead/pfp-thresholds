@@ -100,7 +100,8 @@ def lcp_bwt(s: str, boundaries: Optional[List[int]] = None):
                 i += 1
             end = i
             run_lcp = map(int, lcp[start:end]) if end > start else []
-            yield (run_id, run_offset, curr_char, list(run_lcp))
+            sa_first = sa[start]  # suffix array entry for first element of run
+            yield (run_id, run_offset, curr_char, sa_first, list(run_lcp))
             run_id += 1
             run_offset += (end - start)
 
@@ -251,9 +252,9 @@ def main():
         if boundaries is not None and args.no_truncate_lcp:
             boundaries = None
 
-    print('\t'.join(['id', 'len', 'off', 'c', 'lcp']))
-    for run_id, run_offset, curr_char, run_lcp in lcp_bwt(text, boundaries=boundaries):
-        print('\t'.join([str(run_id), str(len(run_lcp)), str(run_offset), curr_char, ','.join(map(str, run_lcp))]))
+    print('\t'.join(['id', 'off', 'len', 'c', 'sa', 'lcp']))
+    for run_id, run_offset, curr_char, sa_first, run_lcp in lcp_bwt(text, boundaries=boundaries):
+        print('\t'.join([str(run_id), str(run_offset), str(len(run_lcp)), curr_char, str(sa_first), ','.join(map(str, run_lcp))]))
 
 
 if __name__ == "__main__":
