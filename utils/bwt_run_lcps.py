@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+Author: Ben Langmead (with assistance from Codex, Cursor)
+Copyright 2026
+
 Emit run-level LCP lists from a BWT and LCP array.
 
 INPUT.bwt: 1 byte per BWT character (from pfp_lcp).

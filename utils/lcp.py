@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 """
+Author: Ben Langmead (with assistance from Codex, Cursor)
+Copyright 2026
+
 Build suffix array, LCP array, and BWT for threshold investigation.
 Supports inline strings or FASTA input; optional reverse-complement sequences.
 
