@@ -6,7 +6,10 @@ Copyright 2026
 
 Compare run-level LCP TSV outputs: pure Python lcp.py (pydivsufsort) vs the PFP
 pipeline (pfp_lcp binary + bwt_run_lcps.py). Cleans FASTA, runs newscanNT.x and
-pfp_lcp, then asserts TSVs match after normalization.
+pfp_lcp, then asserts the two TSV outputs are byte-identical after normalizing
+line endings and the terminator in the c column (\\x00 and # -> $). Parsed
+comparison includes the SA column and full LCP lists; no normalization that
+would hide differences (e.g. missing first LCP value in the first run) is applied.
 """
 
 from __future__ import annotations
@@ -40,42 +43,74 @@ def parse_lcp_list(raw: str) -> list[int]:
     return [int(x) for x in raw.split(",")] if raw else []
 
 
-def parse_lcp_py_tsv(raw: str) -> list[tuple[int, int, int, str, list[int]]]:
+# Parsed run: (run_id, run_offset, run_len, run_char, sa, lcp_list)
+RunTuple = tuple[int, int, int, str, int, list[int]]
+
+
+def parse_lcp_py_tsv(raw: str) -> list[RunTuple]:
     lines = [l for l in raw.splitlines() if l.strip()]
-    if not lines or lines[0].split("\t") != ["id", "len", "off", "c", "lcp"]:
+    if not lines or lines[0].split("\t") != ["id", "off", "len", "c", "sa", "lcp"]:
         return []
     runs = []
     for line in lines[1:]:
-        run_id, run_len, run_offset, run_char, lcp_raw = line.split("\t")
-        runs.append((int(run_id), int(run_offset), int(run_len), run_char, parse_lcp_list(lcp_raw)))
+        parts = line.split("\t")
+        # id, off, len, c, sa, lcp (column order matches RunTuple)
+        run_id = int(parts[0])
+        run_offset = int(parts[1])
+        run_len = int(parts[2])
+        run_char = parts[3]
+        sa = int(parts[4])
+        lcp_raw = parts[5]
+        runs.append((run_id, run_offset, run_len, run_char, sa, parse_lcp_list(lcp_raw)))
     return runs
 
 
-def parse_bwt_run_tsv(raw: str) -> list[tuple[int, int, int, str, list[int]]]:
+def parse_bwt_run_tsv(raw: str) -> list[RunTuple]:
     runs = []
     for line in raw.splitlines():
         if not line.strip():
             continue
-        run_id, run_offset, run_len, run_char, lcp_raw = line.split("\t")
-        runs.append((int(run_id), int(run_offset), int(run_len), run_char, parse_lcp_list(lcp_raw)))
+        parts = line.split("\t")
+        if parts[0] == "id":
+            continue  # skip header line
+        # id, off, len, c, sa, lcp (6 columns, matches RunTuple order)
+        run_id = int(parts[0])
+        run_offset = int(parts[1])
+        run_len = int(parts[2])
+        run_char = parts[3]
+        sa = int(parts[4]) if len(parts) > 5 else run_offset  # fallback when no sa column
+        lcp_raw = parts[5] if len(parts) > 5 else parts[4]
+        runs.append((run_id, run_offset, run_len, run_char, sa, parse_lcp_list(lcp_raw)))
     return runs
+
+
+def normalize_line_endings(s: str) -> str:
+    """Normalize to Unix newlines and strip trailing whitespace."""
+    return s.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def normalize_tsv_for_byte_compare(s: str) -> str:
+    """Normalize so byte comparison ignores terminator representation (c column: # and \\x00 -> $)."""
+    s = normalize_line_endings(s)
+    # Only normalize the run-char column (between 3rd and 4th tab): \t#\t and \t\x00\t -> \t$\t
+    s = s.replace("\t#\t", "\t$\t").replace("\t\x00\t", "\t$\t")
+    return s
 
 
 def normalize_run_char(c: str) -> str:
     return "$" if c in {"\x00", "#"} else c
 
 
-def normalize_runs(runs: list[tuple[int, int, int, str, list[int]]]) -> list[tuple[int, int, int, str, list[int]]]:
-    out = []
-    for run_id, run_offset, run_len, run_char, lcp_list in runs:
-        if run_id == 0 and len(lcp_list) == run_len - 1:
-            lcp_list = [0] + lcp_list
-        out.append((run_id, run_offset, run_len, normalize_run_char(run_char), lcp_list))
-    return out
+def normalize_runs(runs: list[RunTuple]) -> list[RunTuple]:
+    """Normalize only run_char (terminator). No change to LCP lists so missing first 0 fails."""
+    return [
+        (run_id, run_offset, run_len, normalize_run_char(run_char), sa, lcp_list)
+        for run_id, run_offset, run_len, run_char, sa, lcp_list in runs
+    ]
 
 
 def summarize(runs: list) -> str:
-    lcp_vals = [v for _, _, _, _, lcp in runs for v in lcp]
+    lcp_vals = [v for _, _, _, _, _, lcp in runs for v in lcp]
     dist = sorted(collections.Counter(lcp_vals).items())[:10]
     return f"runs={len(runs)}, lcp_vals={len(lcp_vals)}, dist_head={dict(dist)}"
 
@@ -145,20 +180,36 @@ def compare_one(fasta_path: Path, pfp_lcp_exe: Path, keep_dir: Path | None = Non
                 print(f"  Skip {fasta_path.name}: non-ACGT (lcp.py)")
                 return True
             raise
-        pfp_out = run_cmd([
-            sys.executable, str(BWT_RUN_LCPS),
-            str(clean_path) + ".bwt", str(clean_path) + ".lcp",
-        ])
+        bwt_path = str(clean_path) + ".bwt"
+        lcp_path = str(clean_path) + ".lcp"
+        sa_path = str(clean_path) + ".ssa"
+        pfp_args = [sys.executable, str(BWT_RUN_LCPS), bwt_path, lcp_path]
+        if Path(sa_path).exists():
+            pfp_args += ["--sa", sa_path]
+        pfp_out = run_cmd(pfp_args)
     if keep_dir:
         keep_dir.mkdir(parents=True, exist_ok=True)
         stem = fasta_path.stem
         (keep_dir / f"{stem}_lcp.tsv").write_text(lcp_out)
         (keep_dir / f"{stem}_pfp.tsv").write_text(pfp_out)
+    # Require byte-identical TSV output (after normalizing line endings and terminator in c column)
+    lcp_norm = normalize_tsv_for_byte_compare(lcp_out)
+    pfp_norm = normalize_tsv_for_byte_compare(pfp_out)
+    if lcp_norm != pfp_norm:
+        print(f"  FAIL {fasta_path.name}: TSV outputs are not byte-identical (after normalizing line endings)")
+        if len(lcp_norm) != len(pfp_norm):
+            print(f"    lcp.py length: {len(lcp_norm)}, pfp_lcp length: {len(pfp_norm)}")
+        else:
+            first_diff = next((i for i, (a, b) in enumerate(zip(lcp_norm, pfp_norm)) if a != b), None)
+            if first_diff is not None:
+                print(f"    First byte difference at position {first_diff}")
+        return False
+
     lcp_runs = normalize_runs(parse_lcp_py_tsv(lcp_out))
     pfp_runs = normalize_runs(parse_bwt_run_tsv(pfp_out))
     if lcp_runs != pfp_runs:
         idx = next((i for i, p in enumerate(zip(lcp_runs, pfp_runs)) if p[0] != p[1]), None)
-        print(f"  FAIL {fasta_path.name}: TSVs differ" + (f" at run {idx}" if idx is not None else ""))
+        print(f"  FAIL {fasta_path.name}: parsed runs differ" + (f" at run {idx}" if idx is not None else ""))
         print(f"    lcp.py: {summarize(lcp_runs)}")
         print(f"    pfp_lcp: {summarize(pfp_runs)}")
         return False
