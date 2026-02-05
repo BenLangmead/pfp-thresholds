@@ -1,0 +1,11 @@
+*.bwt
+*.dict
+*.esa
+*.last
+*.lcp
+*.occ
+*.parse
+*.parse_old
+*.sai
+*.ssa
+*.tsv
