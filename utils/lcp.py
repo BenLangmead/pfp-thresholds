@@ -127,7 +127,7 @@ def load_fasta(path: str) -> list:
         for line in f:
             if line.startswith(">"):
                 if current:
-                    seq = "".join(current).strip().replace(" ", "")
+                    seq = "".join(current).replace(" ", "")
                     if seq:
                         for c in seq:
                             if c not in ACGT:
@@ -137,9 +137,9 @@ def load_fasta(path: str) -> list:
                         sequences.append(seq)
                 current = []
             else:
-                current.append(line)
+                current.append(line.strip())
         if current:
-            seq = "".join(current).strip().replace(" ", "")
+            seq = "".join(current).replace(" ", "")
             if seq:
                 for c in seq:
                     if c not in ACGT:
